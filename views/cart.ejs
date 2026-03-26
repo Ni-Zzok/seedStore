@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>АгроМир - Корзина</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <link rel="stylesheet" href="/styles/cart.css">
+    <link rel="stylesheet" href="/styles/chat.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Roboto:wght@300;400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+</head>
+<body>
+    <div class="background"></div>
+
+    <header>
+        <div class="auth-section">
+            <% if (user) { %>
+                <div class="user-profile">
+                    <img src="<%= user.avatar_url || 'https://via.placeholder.com/30x30?text=Avatar' %>" alt="Аватар" class="avatar">
+                    <span><%= user.email %></span>
+                    <button class="logout-btn" onclick="window.location.href='/logout'">Выйти</button>
+                </div>
+            <% } else { %>
+                <a href="/login" class="auth-btn">Вход</a> | <a href="/register" class="auth-btn">Регистрация</a>
+            <% } %>
+        </div>
+    </header>
+
+    <nav class="sidebar">
+        <img src="/logo.png" alt="Логотип АгроМир" class="logo">
+        <ul>
+            <li><a href="/">Главная</a></li>
+            <li><a href="/catalog">Каталог товаров</a></li>
+            <li><a href="/cart">Корзина</a></li>
+            <li><a href="/profile">Личный кабинет</a></li>
+        </ul>
+    </nav>
+
+    <main class="content">
+        <h1 class="page-title">Корзина</h1>
+        <div class="cart-table">
+            <% if (cartItems.length === 0) { %>
+                <p class="empty-cart">Корзина пуста</p>
+            <% } else { %>
+                <% cartItems.forEach(item => { %>
+                    <div class="cart-item">
+                        <img src="<%= item.image_url %>" alt="<%= item.name %>" class="cart-image">
+                        <div class="cart-details">
+                            <h3><%= item.name %></h3>
+                        </div>
+                        <div class="cart-quantity">
+                            <span class="quantity-text" name = "quantity_txt"><%= item.quantity %></span>
+                            <label for="quantity_txt">шт.</label>
+                        </div>
+                        <div class="cart-price">
+                            <p class="price"><%= (item.price * item.quantity).toFixed(2) %> руб.</p>
+                        </div>
+                        <div class="cart-actions">
+                            <button class="remove-btn" data-id="<%= item.id %>">Удалить</button>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } %>
+        </div>
+
+        <% if (cartItems.length > 0) { %>
+            <div class="total-container">
+                <h3>Общая стоимость: <span class="total-price">
+                    <% let total = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2); %>
+                    <%= total %> руб.
+                </span></h3>
+            </div>
+            <div class="checkout-container">
+                <button class="checkout-btn" onclick="window.location.href='/checkout'">Оформить заказ</button>
+            </div>
+        <% } %>
+    </main>
+
+    <!-- Чат-бот -->
+    <div class="chat-container minimized">
+        <div class="chat-header">
+            <span>Agro-bot</span>
+            <button class="chat-toggle-btn">−</button>
+        </div>
+        <div class="chat-body" id="chat">
+            <!-- Сообщения будут добавляться сюда -->
+        </div>
+        <div class="chat-footer">
+            <div class="chat-buttons" id="chatButtons"></div>
+            <div class="chat-input" id="chatInput">
+                <input type="text" id="inputField" placeholder="Введи данные...">
+                <button onclick="submitInput()">Отправить</button>
+                <button onclick="cancelAction()" class="cancel-btn">Отмена</button>
+            </div>
+        </div>
+    </div>
+    <button class="chat-open-btn"><i class="fas fa-comment"></i> Чат</button>
+
+    <footer data-aos="fade-up">
+        <p>© 2025 АгроМир. Все права защищены.</p>
+        <div class="social-links">
+            <a href="https://instagram.com" target="_blank"><i class="fab fa-instagram"></i></a>
+            <a href="https://t.me" target="_blank"><i class="fab fa-telegram"></i></a>
+            <a href="https://vk.com" target="_blank"><i class="fab fa-vk"></i></a>
+        </div>
+    </footer>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/chat.js"></script>
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        AOS.init({
+            duration: 800,
+            once: true
+        });
+        
+        document.querySelectorAll('.remove-btn').forEach(button => {
+            button.addEventListener('click', async () => {
+                const cartItemId = button.getAttribute('data-id');
+                try {
+                    const response = await fetch(`/cart/remove/${cartItemId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (response.ok) {
+                        // Удаляем элемент из DOM
+                        button.closest('.cart-item').remove();
+                        // Обновляем общую стоимость
+                        updateTotalPrice();
+                        // Если корзина пуста, показываем сообщение
+                        if (!document.querySelector('.cart-item')) {
+                            document.querySelector('.cart-table').innerHTML = '<p class="empty-cart">Корзина пуста</p>';
+                            document.querySelector('.total-container').style.display = 'none';
+                            document.querySelector('.checkout-container').style.display = 'none';
+                        }
+                    } else {
+                        alert('Ошибка при удалении товара из корзины');
+                    }
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Произошла ошибка при удалении товара');
+                }
+            });
+        });
+
+        function updateTotalPrice() {
+            const prices = document.querySelectorAll('.cart-price .price');
+            let total = 0;
+            prices.forEach(price => {
+                total += parseFloat(price.textContent);
+            });
+            const totalElement = document.querySelector('.total-price');
+            if (totalElement) {
+                totalElement.textContent = total.toFixed(2) + ' руб.';
+            }
+        }
+    </script>
+</body>
+</html>

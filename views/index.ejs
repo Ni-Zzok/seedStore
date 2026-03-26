@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>АгроМир - Главная</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <link rel="stylesheet" href="/styles/index.css">
+    <link rel="stylesheet" href="/styles/chat.css">
+    <link rel="stylesheet" href="/styles/cookies.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Roboto:wght@300;400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Подключение AOS для анимаций -->
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+</head>
+<body>
+    <div class="background"></div>
+
+    <header>
+        <div class="auth-section">
+            <% if (user) { %>
+                <div class="user-profile">
+                    <img src="<%= user.avatar_url || 'https://via.placeholder.com/30x30?text=Avatar' %>" alt="Аватар" class="avatar">
+                    <span><%= user.email %></span>
+                    <button class="logout-btn" onclick="window.location.href='/logout'">Выйти</button>
+                </div>
+            <% } else { %>
+                <a href="/login" class="auth-btn">Вход</a> | <a href="/register" class="auth-btn">Регистрация</a>
+            <% } %>
+        </div>
+    </header>
+
+    <div class="cookie-banner" id="cookieBanner">
+        <p>Мы используем cookies для улучшения работы сайта. Продолжая, вы соглашаетесь с их использованием.</p>
+        <button onclick="acceptCookies()">Согласен</button>
+    </div>
+
+    <nav class="sidebar">
+        <img src="/logo.png" alt="Логотип АгроМир" class="logo">
+        <ul>
+            <li><a href="/">Главная</a></li>
+            <li><a href="/catalog">Каталог товаров</a></li>
+            <li><a href="/cart">Корзина</a></li>
+            <li><a href="/profile">Личный кабинет</a></li>
+            <% if (user && user.role === 'admin') { %>
+                <li><a href="/admin">Админская панель</a></li>
+            <% } %>
+        </ul>
+    </nav>
+
+    <main class="content">
+        <!-- Геройская секция -->
+        <section class="hero" data-aos="fade-down">
+            <h1 class="page-title">Добро пожаловать в АгроМир!</h1>
+            <p>Мы предлагаем широкий ассортимент товаров для вашего сада и огорода.</p>
+            <a href="/catalog" class="btn">Перейти в каталог</a>
+        </section>
+
+        <!-- Информация о магазине -->
+        <section class="info-section">
+            <div class="info-container" data-aos="fade-up">
+                <h3>О нас</h3>
+                <p>АгроМир — это семейный бизнес, основанный в 2010 году. Мы стремимся предоставлять качественные семена и товары для садоводов по всей России.</p>
+            </div>
+            <div class="info-container" data-aos="fade-up" data-aos-delay="100">
+                <h3>Наши преимущества</h3>
+                <p>Быстрая доставка, широкий ассортимент, проверенные поставщики и индивидуальный подход к каждому клиенту.</p>
+            </div>
+            <div class="info-container" data-aos="fade-up" data-aos-delay="200">
+                <h3>Свяжитесь с нами</h3>
+                <p>Есть вопросы? Пишите нам на <a href="mailto:support@agromir.ru">support@agromir.ru</a> или звоните: +7 (495) 123-45-67.</p>
+            </div>
+        </section>
+
+        <!-- Популярные категории -->
+        <section class="categories">
+            <h2 data-aos="fade-up">Популярные категории</h2>
+            <div class="category-grid">
+                <% categories.forEach((category, index) => { %>
+                    <a href="/catalog?category=<%= category.id %>" class="category-card" data-aos="fade-up" data-aos-delay="<%= index * 100 %>">
+                        <img src="/<%= category.image_url %>" alt="<%= category.name %>">
+                        <h3><%= category.name %></h3>
+                    </a>
+                <% }) %>
+            </div>
+        </section>
+
+        <!-- Призыв к действию -->
+        <section class="cta" data-aos="fade-up">
+            <h2>Готовы вырастить свой сад?</h2>
+            <p>Подпишитесь на нашу рассылку, чтобы получать новости и скидки!</p>
+            <a href="/profile" class="btn">Подписаться на рассылку</a>
+        </section>
+    </main>
+
+    <!-- Чат-бот -->
+    <div class="chat-container minimized">
+        <div class="chat-header">
+            <span>Agro-bot</span>
+            <button class="chat-toggle-btn">−</button>
+        </div>
+        <div class="chat-body" id="chat">
+            <!-- Сообщения будут добавляться сюда -->
+        </div>
+        <div class="chat-footer">
+            <div class="chat-buttons" id="chatButtons"></div>
+            <div class="chat-input" id="chatInput">
+                <input type="text" id="inputField" placeholder="Введи данные...">
+                <button onclick="submitInput()">Отправить</button>
+                <button onclick="cancelAction()" class="cancel-btn">Отмена</button>
+            </div>
+        </div>
+    </div>
+    <button class="chat-open-btn"><i class="fas fa-comment"></i> Чат</button>   
+
+    <footer data-aos="fade-up">
+        <p>© 2025 АгроМир. Все права защищены.</p>
+        <div class="social-links">
+            <a href="https://instagram.com" target="_blank"><i class="fab fa-instagram"></i></a>
+            <a href="https://t.me" target="_blank"><i class="fab fa-telegram"></i></a>
+            <a href="https://vk.com" target="_blank"><i class="fab fa-vk"></i></a>
+        </div>
+    </footer>
+
+    <!-- Подключение Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/chat.js"></script>
+    <!-- Инициализация AOS -->
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        AOS.init({
+            duration: 800, // Длительность анимации
+            once: true // Анимация проигрывается только один раз при прокрутке
+        });
+
+        // JavaScript для управления баннером cookies
+        function acceptCookies() {
+            // Устанавливаем cookie на год
+            document.cookie = "cookiesAccepted=true; max-age=31536000; path=/";
+            document.getElementById('cookieBanner').style.display = 'none';
+        }
+
+        // Проверяем, есть ли cookie согласия
+        function checkCookies() {
+            if (document.cookie.includes('cookiesAccepted=true')) {
+                document.getElementById('cookieBanner').style.display = 'none';
+            } else {
+                document.getElementById('cookieBanner').style.display = 'block';
+            }
+        }
+
+        // Вызываем проверку при загрузке страницы
+        window.onload = checkCookies;
+    </script>
+</body>
+</html>
