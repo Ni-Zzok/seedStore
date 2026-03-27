@@ -1298,11 +1298,11 @@ app.post('/admin/:table/add', requireAdmin, async (req, res) => {
                 VALUES ($1, $2, $3, $4, $5)
             `, [name, contact_person, email, phone, address]);
         } else if (table === 'supplies') {
-            const { supplier_id, quantity, supply_date, price_per_unit, total_cost, product_article } = data;
+            const { supplier_id, quantity, supply_date, price_per_unit, product_article } = data;
             await pool.query(`
-                INSERT INTO Supplies (supplier_id, quantity, supply_date, price_per_unit, total_cost, product_article, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-            `, [supplier_id, quantity, supply_date, price_per_unit, total_cost, product_article]);
+                INSERT INTO Supplies (supplier_id, quantity, supply_date, price_per_unit, product_article, created_at)
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+            `, [supplier_id, quantity, supply_date, price_per_unit, product_article]);
         }
         res.redirect('/admin');
     } catch (err) {
@@ -1374,12 +1374,12 @@ app.post('/admin/:table/edit', requireAdmin, async (req, res) => {
                 WHERE id = $6
             `, [name, contact_person, email, phone, address, id]);
         } else if (table === 'supplies') {
-            const { id, supplier_id, quantity, supply_date, price_per_unit, total_cost, product_article } = data;
+            const { id, supplier_id, quantity, supply_date, price_per_unit, product_article } = data;
             await pool.query(`
                 UPDATE Supplies
-                SET supplier_id = $1, quantity = $2, supply_date = $3, price_per_unit = $4, total_cost = $5, product_article = $6
-                WHERE id = $7
-            `, [supplier_id, quantity, supply_date, price_per_unit, total_cost, product_article, id]);
+                SET supplier_id = $1, quantity = $2, supply_date = $3, price_per_unit = $4, product_article = $5
+                WHERE id = $6
+            `, [supplier_id, quantity, supply_date, price_per_unit, product_article, id]);
         }
         res.redirect('/admin');
     } catch (err) {

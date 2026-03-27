@@ -83,7 +83,6 @@ function openAddModal(table) {
             { name: 'quantity', type: 'number', required: true },
             { name: 'supply_date', type: 'date', required: true },
             { name: 'price_per_unit', type: 'number', step: '0.01', required: true },
-            { name: 'total_cost', type: 'number', step: '0.01', required: true },
             { name: 'product_article', type: 'text', required: true }
         ]
     };
@@ -210,7 +209,6 @@ function openEditModal(table, record) {
             { name: 'quantity', type: 'number', value: record.quantity },
             { name: 'supply_date', type: 'date', value: record.supply_date },
             { name: 'price_per_unit', type: 'number', step: '0.01', value: record.price_per_unit },
-            { name: 'total_cost', type: 'number', step: '0.01', value: record.total_cost },
             { name: 'product_article', type: 'text', value: record.product_article }
         ]
     };
