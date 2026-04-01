@@ -1,5 +1,7 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
@@ -11,10 +13,24 @@ const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
 const isProduction = process.env.NODE_ENV === 'production';
+
+const httpsKeyPath = process.env.HTTPS_KEY_PATH;
+const httpsCertPath = process.env.HTTPS_CERT_PATH;
+const httpsEnabled = Boolean(httpsKeyPath && httpsCertPath);
+
+if (httpsEnabled) {
+    app.set('trust proxy', 1);
+}
+
+const server = httpsEnabled
+    ? https.createServer({
+        key: fs.readFileSync(httpsKeyPath),
+        cert: fs.readFileSync(httpsCertPath)
+      }, app)
+    : http.createServer(app);
+
+const io = new Server(server);
 
 let dailyStats = {
     visits: 0,
@@ -69,7 +85,7 @@ const sessionMiddleware = session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Временно для теста
+      secure: httpsEnabled,
       maxAge: 86400000,
       sameSite: 'lax'
     }
@@ -1541,5 +1557,9 @@ app.get('/reset-old-passwords', async (req, res) => {
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    logger.info(`Сервер запущен на порту ${PORT}`);
+    const protocol = httpsEnabled ? 'https' : 'http';
+    logger.info(`Сервер запущен на ${protocol}://localhost:${PORT}`);
+    if (!httpsEnabled) {
+        logger.warn('HTTPS отключён. Укажите HTTPS_KEY_PATH и HTTPS_CERT_PATH для запуска по HTTPS.');
+    }
 });
