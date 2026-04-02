@@ -95,6 +95,7 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Передаем сессии в Socket.IO
@@ -1406,7 +1407,13 @@ app.post('/admin/:table/edit', requireAdmin, async (req, res) => {
 
 app.post('/admin/:table/delete', requireAdmin, async (req, res) => {
     const table = req.params.table;
-    const { id } = req.body;
+    const rawId = req.body ? req.body.id : undefined;
+    const id = typeof rawId === 'string' ? rawId.trim() : rawId;
+
+    if (id === undefined || id === null || id === '') {
+        return res.status(400).send('Не передан id для удаления');
+    }
+
     try {
         if (table === 'users') {
             await pool.query('DELETE FROM Users WHERE id = $1', [id]);

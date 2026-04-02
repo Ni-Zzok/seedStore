@@ -268,12 +268,14 @@ function deleteRecord(table, id) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
-        }).then(response => {
-            if (response.ok) {
-                location.reload();
-            } else {
-                alert('Ошибка при удалении записи');
+        }).then(async response => {
+            if (!response.ok) {
+                const errorText = (await response.text()) || 'Ошибка при удалении записи';
+                throw new Error(errorText);
             }
+            location.reload();
+        }).catch(error => {
+            alert(error.message || 'Ошибка при удалении записи');
         });
     }
 }
