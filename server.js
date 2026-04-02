@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const winston = require('winston');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
@@ -82,6 +83,11 @@ pool.connect()
 // Конфигурация сессий
 const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'default_secret',
+    store: new PgSession({
+      pool,
+      tableName: 'user_sessions',
+      createTableIfMissing: true
+    }),
     resave: false,
     saveUninitialized: false,
     cookie: {
