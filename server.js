@@ -135,7 +135,7 @@ app.use((req, res, next) => {
         res.cookie('visitTracked', 'true', {
             maxAge: 24 * 60 * 60 * 1000,
             httpOnly: true,
-            secure: isProduction
+            secure: httpsEnabled
         });
     }
     next();
