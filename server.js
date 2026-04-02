@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const winston = require('winston');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
@@ -82,6 +83,11 @@ pool.connect()
 // Конфигурация сессий
 const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'default_secret',
+    store: new PgSession({
+      pool,
+      tableName: 'user_sessions',
+      createTableIfMissing: true
+    }),
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -611,41 +617,66 @@ app.post('/profile', requireAuth, async (req, res) => {
         if (!match) {
             return res.status(400).send('Неверный текущий пароль');
         }
+
+        const normalizeRequiredText = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizeOptionalText = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizeOptionalDate = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizedEmail = normalizeRequiredText(email);
+        if (!normalizedEmail) {
+            return res.status(400).send('Email не может быть пустым');
+        }
+
+        const normalizedFirstName = normalizeRequiredText(firstName);
+        const normalizedLastName = normalizeOptionalText(lastName);
+        const normalizedPhone = normalizeOptionalText(phone);
+        const normalizedAddress = normalizeOptionalText(address);
+        const normalizedBirthDate = normalizeOptionalDate(birthDate);
+        const normalizedGender = normalizeOptionalText(gender);
+        const normalizedNewPassword = normalizeOptionalText(newPassword);
+
         const updateFields = [];
         const values = [];
         let paramIndex = 1;
-        if (email) {
-            updateFields.push(`email = $${paramIndex++}`);
-            values.push(email);
-        }
-        if (firstName) {
-            updateFields.push(`first_name = $${paramIndex++}`);
-            values.push(firstName);
-        }
-        if (lastName) {
-            updateFields.push(`last_name = $${paramIndex++}`);
-            values.push(lastName);
-        }
-        if (phone) {
-            updateFields.push(`phone = $${paramIndex++}`);
-            values.push(phone);
-        }
-        if (address) {
-            updateFields.push(`address = $${paramIndex++}`);
-            values.push(address);
-        }
-        if (birthDate) {
-            updateFields.push(`birth_date = $${paramIndex++}`);
-            values.push(birthDate);
-        }
-        if (gender) {
-            updateFields.push(`gender = $${paramIndex++}`);
-            values.push(gender);
-        }
+        updateFields.push(`email = $${paramIndex++}`);
+        values.push(normalizedEmail);
+
+        updateFields.push(`first_name = $${paramIndex++}`);
+        values.push(normalizedFirstName);
+
+        updateFields.push(`last_name = $${paramIndex++}`);
+        values.push(normalizedLastName);
+
+        updateFields.push(`phone = $${paramIndex++}`);
+        values.push(normalizedPhone);
+
+        updateFields.push(`address = $${paramIndex++}`);
+        values.push(normalizedAddress);
+
+        updateFields.push(`birth_date = $${paramIndex++}`);
+        values.push(normalizedBirthDate);
+
+        updateFields.push(`gender = $${paramIndex++}`);
+        values.push(normalizedGender);
+
         updateFields.push(`newsletter = $${paramIndex++}`);
         values.push(newsletter === 'on');
-        if (newPassword) {
-            const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+        if (normalizedNewPassword) {
+            const hashedNewPassword = await bcrypt.hash(normalizedNewPassword, saltRounds);
             updateFields.push(`password = $${paramIndex++}`);
             values.push(hashedNewPassword);
         }
