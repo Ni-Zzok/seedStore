@@ -204,7 +204,7 @@ if (isProduction) {
 }
 // Основные маршруты
 app.get('/', async (req, res) => {
-    logger.info(`Сессия на главной: userId=${req.session.userId}, user=${JSON.stringify(req.session.user)}`);
+    logger.info(`Сессия на главной: userId=${req.session.userId || 'guest'}, authenticated=${Boolean(req.session.userId)}`);
     try {
       const categoriesResult = await pool.query(`
         SELECT id, name, image_url
@@ -231,22 +231,20 @@ app.get('/login', (req, res) => {
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        logger.info(`Попытка входа: email=${email}, password=${password}`);
+        logger.info(`Попытка входа: email=${email}`);
         const result = await pool.query(`
             SELECT id, email, password, first_name, last_name, avatar_url, role
             FROM Users
             WHERE email = $1
         `, [email]);
         if (result.rows.length === 0) {
-            logger.warn(`Пользователь с email ${email} не найден`);
+            logger.warn(`Ошибка входа: email=${email}, reason=user_not_found`);
             return res.render('login', { error: 'Пользователь не найден', user: null });
         }
         const user = result.rows[0];
-        logger.info(`Найден пользователь: email=${user.email}, хранимый пароль=${user.password}`);
         const match = await bcrypt.compare(password, user.password);
-        logger.info(`Результат сравнения паролей: match=${match}`);
         if (!match) {
-            logger.warn(`Неверный пароль для пользователя ${email}`);
+            logger.warn(`Ошибка входа: email=${email}, reason=wrong_password`);
             return res.render('login', { error: 'Неверный пароль', user: null });
         }
         req.session.userId = user.id;
@@ -257,7 +255,7 @@ app.post('/login', async (req, res) => {
             avatar_url: user.avatar_url,
             role: user.role
         };
-        logger.info(`Пользователь ${user.email} (роль: ${user.role}) вошёл в систему`);
+        logger.info(`Успешный вход: email=${user.email}, userId=${user.id}`);
         if (user.role === 'admin') {
             res.redirect('/admin');
         } else {
@@ -1041,7 +1039,7 @@ io.on('connection', (socket) => {
         }
     });
     socket.on('input_submit', async (msg) => {
-        logger.info(`Получено событие input_submit: ${msg}`);
+        logger.info(`Получено событие input_submit: userId=${userId || 'guest'}, messageLength=${msg ? msg.length : 0}`);
         if (orderState.step === 'article') {
             if (!userId) {
                 socket.emit('response', 'Для оформления заказа нужно войти в систему. <a href="/login">Войти</a>');
@@ -1538,25 +1536,6 @@ app.get('/admin/sales-stats', requireAdmin, async (req, res) => {
         });
     } catch (err) {
         logger.error('Ошибка при загрузке страницы статистики продаж: ' + err.stack);
-        res.status(500).send('Ошибка сервера');
-    }
-});
-
-// Утилитный маршрут для сброса паролей
-app.get('/reset-old-passwords', async (req, res) => {
-    const saltRounds = 10;
-    const newPassword = '1234';
-    try {
-        const users = await pool.query('SELECT id, email FROM Users');
-        for (const user of users.rows) {
-            if (user.email === 'user9@example.com') continue;
-            const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-            await pool.query('UPDATE Users SET password = $1 WHERE id = $2', [hashedPassword, user.id]);
-            logger.info(`Пароль для пользователя ${user.email} (id: ${user.id}) сброшен на 1234`);
-        }
-        res.send('Пароли для старых пользователей сброшены на 1234');
-    } catch (err) {
-        logger.error('Ошибка при сбросе паролей: ' + err.stack);
         res.status(500).send('Ошибка сервера');
     }
 });
