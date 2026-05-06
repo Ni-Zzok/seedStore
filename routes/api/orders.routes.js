@@ -1,0 +1,11 @@
+const express = require('express');
+const { asyncHandler } = require('../../middleware/errorHandler');
+const { requireAuth, requireAdmin } = require('../../middleware/auth');
+const c = require('../../controllers/orders.controller');
+const router = express.Router();
+router.use(requireAuth);
+router.get('/', asyncHandler(c.listOrders));
+router.get('/:id', asyncHandler(c.getOrder));
+router.post('/', asyncHandler(c.createOrder));
+router.patch('/:id/status', requireAdmin, asyncHandler(c.updateStatus));
+module.exports = router;

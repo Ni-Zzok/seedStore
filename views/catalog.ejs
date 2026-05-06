@@ -47,7 +47,7 @@
         <!-- Фильтры, сортировка и поиск -->
         <div class="catalog-controls">
             <!-- Форма для поиска, сортировки и фильтров -->
-            <form id="catalogForm" action="/catalog" method="GET" class="catalog-form">
+            <form id="catalogForm" class="catalog-form">
                 <!-- Поиск -->
                 <div class="search-form">
                     <input type="text" name="search" placeholder="Поиск по названию или описанию..." value="<%= searchQuery || '' %>">
@@ -57,7 +57,7 @@
                 <!-- Сортировка -->
                 <div class="sort-options">
                     <label for="sort">Сортировать:</label>
-                    <select name="sort" id="sort" onchange="this.form.submit()">
+                    <select name="sort" id="sort">
                         <option value="name_asc" <%= sort === 'name_asc' ? 'selected' : '' %>>По алфавиту (A-Z)</option>
                         <option value="name_desc" <%= sort === 'name_desc' ? 'selected' : '' %>>По алфавиту (Z-A)</option>
                         <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>>По цене (возр.)</option>
@@ -70,7 +70,7 @@
                 <!-- Фильтры -->
                 <div class="filter-group">
                     <label for="category">Категория:</label>
-                    <select name="category" id="category" onchange="this.form.submit()">
+                    <select name="category" id="category">
                         <option value="">Все категории</option>
                         <% categories.forEach(category => { %>
                             <option value="<%= category.id %>" <%= categoryId == category.id ? 'selected' : '' %>><%= category.name %></option>
@@ -79,7 +79,7 @@
                 </div>
                 <div class="filter-group">
                     <label for="inStock">Наличие:</label>
-                    <select name="inStock" id="inStock" onchange="this.form.submit()">
+                    <select name="inStock" id="inStock">
                         <option value="">Все товары</option>
                         <option value="true" <%= inStock === 'true' ? 'selected' : '' %>>В наличии</option>
                         <option value="false" <%= inStock === 'false' ? 'selected' : '' %>>Нет в наличии</option>
@@ -88,28 +88,10 @@
             </form>
         </div>
 
-        <!-- Сетка товаров -->
-        <div class="catalog-grid">
-            <% if (products.length === 0) { %>
-                <p>Товары не найдены.</p>
-            <% } else { %>
-                <% products.forEach(product => { %>
-                    <a href="/product/<%= product.article %>" class="product-card-link">
-                        <div class="product-card">
-                            <img src="<%= product.image_url %>" alt="<%= product.name %>">
-                            <h3><%= product.name %></h3>
-                            <p class="category">Категория: <%= product.category_name || 'Без категории' %></p>
-                            <p class="price"><%= product.price %> руб.</p>
-                            <p class="stock">В наличии: <%= product.stock %> шт.</p>
-                            <form action="/cart/add" method="POST" class="add-to-cart-form">
-                                <input type="hidden" name="article" value="<%= product.article %>">
-                                <input type="number" name="quantity" value="1" min="1" max="<%= product.stock %>" required style="display: none;">
-                                <button type="submit" class="add-to-cart-btn">Добавить в корзину</button>
-                            </form>
-                        </div>
-                    </a>
-                <% }); %>
-            <% } %>
+        <!-- Сетка товаров: данные загружаются через REST API /api/products -->
+        <div id="catalogError" class="api-error" style="display: none;"></div>
+        <div class="catalog-grid" id="catalogGrid">
+            <p>Загрузка товаров...</p>
         </div>
     </main>
 
@@ -144,6 +126,7 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/chat.js"></script>
+    <script src="/js/catalog-api.js"></script>
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
     <script>
         AOS.init({

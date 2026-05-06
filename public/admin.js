@@ -20,6 +20,8 @@ function openAddModal(table) {
     modalTitle.textContent = `Добавить запись в ${table}`;
     modalFields.innerHTML = '';
     modalForm.action = `/admin/${table}/add`;
+    modalForm.dataset.table = table;
+    modalForm.dataset.mode = 'add';
 
     const fields = {
         users: [
@@ -139,6 +141,8 @@ function openEditModal(table, record) {
     modalTitle.textContent = `Редактировать запись в ${table}`;
     modalFields.innerHTML = '';
     modalForm.action = `/admin/${table}/edit`;
+    modalForm.dataset.table = table;
+    modalForm.dataset.mode = 'edit';
 
     const fields = {
         users: [
@@ -264,14 +268,15 @@ function closeModal() {
 // Удаление записи
 function deleteRecord(table, id) {
     if (confirm(`Вы уверены, что хотите удалить запись из ${table}?`)) {
-        fetch(`/admin/${table}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
+        const restUrl = getRestUrl(table, id);
+        fetch(restUrl || `/admin/${table}/delete`, {
+            method: restUrl ? 'DELETE' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: restUrl ? undefined : JSON.stringify({ id })
         }).then(async response => {
             if (!response.ok) {
-                const errorText = (await response.text()) || 'Ошибка при удалении записи';
-                throw new Error(errorText);
+                const data = await response.json().catch(async () => ({ error: await response.text() }));
+                throw new Error(data.error || 'Ошибка при удалении записи');
             }
             location.reload();
         }).catch(error => {
@@ -279,3 +284,58 @@ function deleteRecord(table, id) {
         });
     }
 }
+
+
+function getRestUrl(table, id) {
+    const routes = {
+        products: `/api/products/${encodeURIComponent(id)}`,
+        categories: `/api/categories/${encodeURIComponent(id)}`,
+        suppliers: `/api/suppliers/${encodeURIComponent(id)}`,
+        supplies: `/api/supplies/${encodeURIComponent(id)}`
+    };
+    return routes[table] || null;
+}
+
+function formDataToJson(form) {
+    const data = {};
+    new FormData(form).forEach((value, key) => {
+        data[key] = value === '' ? null : value;
+    });
+    form.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        data[checkbox.name] = checkbox.checked;
+    });
+    return data;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modalForm = document.getElementById('modal-form');
+    if (!modalForm) return;
+    modalForm.addEventListener('submit', async (event) => {
+        const { table, mode } = modalForm.dataset;
+        if (!['products', 'categories', 'suppliers', 'supplies'].includes(table)) return;
+        event.preventDefault();
+        const data = formDataToJson(modalForm);
+        let url;
+        let method;
+        if (mode === 'add') {
+            url = `/api/${table}`;
+            method = 'POST';
+        } else {
+            const id = table === 'products' ? data.article : data.id;
+            url = getRestUrl(table, id);
+            method = 'PATCH';
+        }
+        try {
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const responseData = response.status === 204 ? null : await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(responseData?.error || 'Ошибка API');
+            location.reload();
+        } catch (error) {
+            alert(error.message || 'Ошибка API');
+        }
+    });
+});

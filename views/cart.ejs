@@ -120,10 +120,10 @@
             button.addEventListener('click', async () => {
                 const cartItemId = button.getAttribute('data-id');
                 try {
-                    const response = await fetch(`/cart/remove/${cartItemId}`, {
+                    const response = await fetch(`/api/cart/items/${cartItemId}`, {
                         method: 'DELETE',
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Accept': 'application/json'
                         }
                     });
                     if (response.ok) {
@@ -138,7 +138,8 @@
                             document.querySelector('.checkout-container').style.display = 'none';
                         }
                     } else {
-                        alert('Ошибка при удалении товара из корзины');
+                        const data = await response.json().catch(() => ({}));
+                        alert(data.error || 'Ошибка при удалении товара из корзины');
                     }
                 } catch (error) {
                     console.error('Ошибка:', error);

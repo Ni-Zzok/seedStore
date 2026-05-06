@@ -1,0 +1,11 @@
+const express = require('express');
+const { asyncHandler } = require('../../middleware/errorHandler');
+const { requireAdmin } = require('../../middleware/auth');
+const c = require('../../controllers/categories.controller');
+const router = express.Router();
+router.get('/', asyncHandler(c.listCategories));
+router.get('/:id', asyncHandler(c.getCategory));
+router.post('/', requireAdmin, asyncHandler(c.createCategory));
+router.patch('/:id', requireAdmin, asyncHandler(c.updateCategory));
+router.delete('/:id', requireAdmin, asyncHandler(c.deleteCategory));
+module.exports = router;

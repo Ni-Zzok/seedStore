@@ -1,0 +1,39 @@
+{
+  "info": {
+    "name": "AgroShop REST API LR2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection для проверки REST API интернет-магазина семян."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "article", "value": "SEED-001" },
+    { "key": "cartItemId", "value": "1" },
+    { "key": "orderId", "value": "1" },
+    { "key": "categoryId", "value": "1" },
+    { "key": "supplierId", "value": "1" },
+    { "key": "supplyId", "value": "1" }
+  ],
+  "item": [
+    { "name": "Register", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/auth/register", "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password\",\n  \"firstName\": \"Иван\",\n  \"lastName\": \"Петров\",\n  \"phone\": \"+79990000000\",\n  \"birthDate\": \"2000-01-01\",\n  \"newsletter\": true\n}" } } },
+    { "name": "Login", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/auth/login", "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password\"\n}" } } },
+    { "name": "Me", "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" } },
+    { "name": "List products", "request": { "method": "GET", "url": "{{baseUrl}}/products?page=1&limit=10" } },
+    { "name": "Filter products", "request": { "method": "GET", "url": "{{baseUrl}}/products?search=томат&category={{categoryId}}&inStock=true&sort=price_asc&page=1&limit=10" } },
+    { "name": "Get product", "request": { "method": "GET", "url": "{{baseUrl}}/products/{{article}}" } },
+    { "name": "Create product (admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/products", "body": { "mode": "raw", "raw": "{\n  \"article\": \"SEED-TEST\",\n  \"name\": \"Семена тестовые\",\n  \"description\": \"Товар для теста\",\n  \"category_id\": 1,\n  \"image_url\": \"/images/tomatoes.jpg\",\n  \"price\": 99.90,\n  \"stock\": 10\n}" } } },
+    { "name": "Patch product (admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/products/SEED-TEST", "body": { "mode": "raw", "raw": "{\n  \"price\": 109.90,\n  \"stock\": 12\n}" } } },
+    { "name": "Delete product (admin)", "request": { "method": "DELETE", "url": "{{baseUrl}}/products/SEED-TEST" } },
+    { "name": "List categories", "request": { "method": "GET", "url": "{{baseUrl}}/categories" } },
+    { "name": "List suppliers (admin)", "request": { "method": "GET", "url": "{{baseUrl}}/suppliers" } },
+    { "name": "List supplies (admin)", "request": { "method": "GET", "url": "{{baseUrl}}/supplies?supplierId={{supplierId}}&productArticle={{article}}" } },
+    { "name": "Add cart item", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/cart/items", "body": { "mode": "raw", "raw": "{\n  \"article\": \"{{article}}\",\n  \"quantity\": 2\n}" } } },
+    { "name": "Get cart", "request": { "method": "GET", "url": "{{baseUrl}}/cart" } },
+    { "name": "Patch cart item", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/cart/items/{{cartItemId}}", "body": { "mode": "raw", "raw": "{\n  \"quantity\": 3\n}" } } },
+    { "name": "Delete cart item", "request": { "method": "DELETE", "url": "{{baseUrl}}/cart/items/{{cartItemId}}" } },
+    { "name": "Create order", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/orders", "body": { "mode": "raw", "raw": "{\n  \"shippingAddress\": \"г. Москва, ул. Полевая, д. 1\"\n}" } } },
+    { "name": "List orders", "request": { "method": "GET", "url": "{{baseUrl}}/orders" } },
+    { "name": "Get order", "request": { "method": "GET", "url": "{{baseUrl}}/orders/{{orderId}}" } },
+    { "name": "Patch order status (admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/orders/{{orderId}}/status", "body": { "mode": "raw", "raw": "{\n  \"status\": \"completed\"\n}" } } },
+    { "name": "Profile", "request": { "method": "GET", "url": "{{baseUrl}}/profile" } }
+  ]
+}
