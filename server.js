@@ -1,9 +1,12 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const path = require('path');
 const { Pool } = require('pg');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const winston = require('winston');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
@@ -11,10 +14,24 @@ const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
 const isProduction = process.env.NODE_ENV === 'production';
+
+const httpsKeyPath = process.env.HTTPS_KEY_PATH;
+const httpsCertPath = process.env.HTTPS_CERT_PATH;
+const httpsEnabled = Boolean(httpsKeyPath && httpsCertPath);
+
+if (httpsEnabled) {
+    app.set('trust proxy', 1);
+}
+
+const server = httpsEnabled
+    ? https.createServer({
+        key: fs.readFileSync(httpsKeyPath),
+        cert: fs.readFileSync(httpsCertPath)
+      }, app)
+    : http.createServer(app);
+
+const io = new Server(server);
 
 let dailyStats = {
     visits: 0,
@@ -66,10 +83,15 @@ pool.connect()
 // Конфигурация сессий
 const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'default_secret',
+    store: new PgSession({
+      pool,
+      tableName: 'user_sessions',
+      createTableIfMissing: true
+    }),
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Временно для теста
+      secure: httpsEnabled,
       maxAge: 86400000,
       sameSite: 'lax'
     }
@@ -79,6 +101,7 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Передаем сессии в Socket.IO
@@ -119,7 +142,7 @@ app.use((req, res, next) => {
         res.cookie('visitTracked', 'true', {
             maxAge: 24 * 60 * 60 * 1000,
             httpOnly: true,
-            secure: isProduction
+            secure: httpsEnabled
         });
     }
     next();
@@ -187,7 +210,7 @@ if (isProduction) {
 }
 // Основные маршруты
 app.get('/', async (req, res) => {
-    logger.info(`Сессия на главной: userId=${req.session.userId}, user=${JSON.stringify(req.session.user)}`);
+    logger.info(`Сессия на главной: userId=${req.session.userId || 'guest'}, authenticated=${Boolean(req.session.userId)}`);
     try {
       const categoriesResult = await pool.query(`
         SELECT id, name, image_url
@@ -214,22 +237,20 @@ app.get('/login', (req, res) => {
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        logger.info(`Попытка входа: email=${email}, password=${password}`);
+        logger.info(`Попытка входа: email=${email}`);
         const result = await pool.query(`
             SELECT id, email, password, first_name, last_name, avatar_url, role
             FROM Users
             WHERE email = $1
         `, [email]);
         if (result.rows.length === 0) {
-            logger.warn(`Пользователь с email ${email} не найден`);
+            logger.warn(`Ошибка входа: email=${email}, reason=user_not_found`);
             return res.render('login', { error: 'Пользователь не найден', user: null });
         }
         const user = result.rows[0];
-        logger.info(`Найден пользователь: email=${user.email}, хранимый пароль=${user.password}`);
         const match = await bcrypt.compare(password, user.password);
-        logger.info(`Результат сравнения паролей: match=${match}`);
         if (!match) {
-            logger.warn(`Неверный пароль для пользователя ${email}`);
+            logger.warn(`Ошибка входа: email=${email}, reason=wrong_password`);
             return res.render('login', { error: 'Неверный пароль', user: null });
         }
         req.session.userId = user.id;
@@ -240,7 +261,7 @@ app.post('/login', async (req, res) => {
             avatar_url: user.avatar_url,
             role: user.role
         };
-        logger.info(`Пользователь ${user.email} (роль: ${user.role}) вошёл в систему`);
+        logger.info(`Успешный вход: email=${user.email}, userId=${user.id}`);
         if (user.role === 'admin') {
             res.redirect('/admin');
         } else {
@@ -596,41 +617,66 @@ app.post('/profile', requireAuth, async (req, res) => {
         if (!match) {
             return res.status(400).send('Неверный текущий пароль');
         }
+
+        const normalizeRequiredText = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizeOptionalText = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizeOptionalDate = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : null;
+        };
+
+        const normalizedEmail = normalizeRequiredText(email);
+        if (!normalizedEmail) {
+            return res.status(400).send('Email не может быть пустым');
+        }
+
+        const normalizedFirstName = normalizeRequiredText(firstName);
+        const normalizedLastName = normalizeOptionalText(lastName);
+        const normalizedPhone = normalizeOptionalText(phone);
+        const normalizedAddress = normalizeOptionalText(address);
+        const normalizedBirthDate = normalizeOptionalDate(birthDate);
+        const normalizedGender = normalizeOptionalText(gender);
+        const normalizedNewPassword = normalizeOptionalText(newPassword);
+
         const updateFields = [];
         const values = [];
         let paramIndex = 1;
-        if (email) {
-            updateFields.push(`email = $${paramIndex++}`);
-            values.push(email);
-        }
-        if (firstName) {
-            updateFields.push(`first_name = $${paramIndex++}`);
-            values.push(firstName);
-        }
-        if (lastName) {
-            updateFields.push(`last_name = $${paramIndex++}`);
-            values.push(lastName);
-        }
-        if (phone) {
-            updateFields.push(`phone = $${paramIndex++}`);
-            values.push(phone);
-        }
-        if (address) {
-            updateFields.push(`address = $${paramIndex++}`);
-            values.push(address);
-        }
-        if (birthDate) {
-            updateFields.push(`birth_date = $${paramIndex++}`);
-            values.push(birthDate);
-        }
-        if (gender) {
-            updateFields.push(`gender = $${paramIndex++}`);
-            values.push(gender);
-        }
+        updateFields.push(`email = $${paramIndex++}`);
+        values.push(normalizedEmail);
+
+        updateFields.push(`first_name = $${paramIndex++}`);
+        values.push(normalizedFirstName);
+
+        updateFields.push(`last_name = $${paramIndex++}`);
+        values.push(normalizedLastName);
+
+        updateFields.push(`phone = $${paramIndex++}`);
+        values.push(normalizedPhone);
+
+        updateFields.push(`address = $${paramIndex++}`);
+        values.push(normalizedAddress);
+
+        updateFields.push(`birth_date = $${paramIndex++}`);
+        values.push(normalizedBirthDate);
+
+        updateFields.push(`gender = $${paramIndex++}`);
+        values.push(normalizedGender);
+
         updateFields.push(`newsletter = $${paramIndex++}`);
         values.push(newsletter === 'on');
-        if (newPassword) {
-            const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+        if (normalizedNewPassword) {
+            const hashedNewPassword = await bcrypt.hash(normalizedNewPassword, saltRounds);
             updateFields.push(`password = $${paramIndex++}`);
             values.push(hashedNewPassword);
         }
@@ -1024,7 +1070,7 @@ io.on('connection', (socket) => {
         }
     });
     socket.on('input_submit', async (msg) => {
-        logger.info(`Получено событие input_submit: ${msg}`);
+        logger.info(`Получено событие input_submit: userId=${userId || 'guest'}, messageLength=${msg ? msg.length : 0}`);
         if (orderState.step === 'article') {
             if (!userId) {
                 socket.emit('response', 'Для оформления заказа нужно войти в систему. <a href="/login">Войти</a>');
@@ -1390,7 +1436,13 @@ app.post('/admin/:table/edit', requireAdmin, async (req, res) => {
 
 app.post('/admin/:table/delete', requireAdmin, async (req, res) => {
     const table = req.params.table;
-    const { id } = req.body;
+    const rawId = req.body ? req.body.id : undefined;
+    const id = typeof rawId === 'string' ? rawId.trim() : rawId;
+
+    if (id === undefined || id === null || id === '') {
+        return res.status(400).send('Не передан id для удаления');
+    }
+
     try {
         if (table === 'users') {
             await pool.query('DELETE FROM Users WHERE id = $1', [id]);
@@ -1519,27 +1571,12 @@ app.get('/admin/sales-stats', requireAdmin, async (req, res) => {
     }
 });
 
-// Утилитный маршрут для сброса паролей
-app.get('/reset-old-passwords', async (req, res) => {
-    const saltRounds = 10;
-    const newPassword = '1234';
-    try {
-        const users = await pool.query('SELECT id, email FROM Users');
-        for (const user of users.rows) {
-            if (user.email === 'user9@example.com') continue;
-            const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-            await pool.query('UPDATE Users SET password = $1 WHERE id = $2', [hashedPassword, user.id]);
-            logger.info(`Пароль для пользователя ${user.email} (id: ${user.id}) сброшен на 1234`);
-        }
-        res.send('Пароли для старых пользователей сброшены на 1234');
-    } catch (err) {
-        logger.error('Ошибка при сбросе паролей: ' + err.stack);
-        res.status(500).send('Ошибка сервера');
-    }
-});
-
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    logger.info(`Сервер запущен на порту ${PORT}`);
+    const protocol = httpsEnabled ? 'https' : 'http';
+    logger.info(`Сервер запущен на ${protocol}://localhost:${PORT}`);
+    if (!httpsEnabled) {
+        logger.warn('HTTPS отключён. Укажите HTTPS_KEY_PATH и HTTPS_CERT_PATH для запуска по HTTPS.');
+    }
 });

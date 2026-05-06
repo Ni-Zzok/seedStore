@@ -1,4 +1,6 @@
 node_modules/
+*.pem
+*.patch
 .env
 .vs/
 .vscode/
