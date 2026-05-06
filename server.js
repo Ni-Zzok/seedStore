@@ -4,11 +4,14 @@ const https = require('https');
 const fs = require('fs');
 const { Server } = require('socket.io');
 const path = require('path');
-const { Pool } = require('pg');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const winston = require('winston');
 const bcrypt = require('bcryptjs');
+const pool = require('./db/pool');
+const { requireAuth, requireAdmin } = require('./middleware/auth');
+const { apiErrorHandler } = require('./middleware/errorHandler');
+const { setupSwagger } = require('./swagger/swagger');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 require('dotenv').config();
@@ -64,13 +67,6 @@ const statsLogger = {
 //     port: 5433
 // });
 
-// Подключение к PostgreSQL
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: isProduction ? { rejectUnauthorized: false } : false
-  });
-  
-
 // Проверка подключения к БД
 pool.connect()
   .then(client => {
@@ -108,31 +104,6 @@ app.use(express.urlencoded({ extended: true }));
 io.use((socket, next) => {
     sessionMiddleware(socket.request, {}, next);
 });
-
-// Middleware для проверки авторизации
-const requireAuth = (req, res, next) => {
-    if (!req.session.userId) {
-        return res.status(403).send('Необходимо войти в систему. <a href="/login">Войти</a>');
-    }
-    next();
-};
-
-// Middleware для проверки роли администратора
-const requireAdmin = async (req, res, next) => {
-    if (!req.session.userId) {
-        return res.status(403).send('Необходимо войти в систему. <a href="/login">Войти</a>');
-    }
-    try {
-        const result = await pool.query('SELECT role FROM Users WHERE id = $1', [req.session.userId]);
-        if (result.rows.length === 0 || result.rows[0].role !== 'admin') {
-            return res.status(403).send('Доступ запрещён. Требуются права администратора. <a href="/">На главную</a>');
-        }
-        next();
-    } catch (err) {
-        logger.error('Ошибка при проверке роли администратора: ' + err.stack);
-        res.status(500).send('Ошибка сервера');
-    }
-};
 
 // Middleware для подсчета уникальных посещений
 app.use((req, res, next) => {
@@ -197,6 +168,12 @@ const upload = multer({
     fileFilter: fileFilter,
     limits: { fileSize: 5 * 1024 * 1024 } // Максимум 5 МБ
 });
+
+
+// REST API и Swagger/OpenAPI для ЛР №2
+app.use('/api', require('./routes/api')(upload));
+setupSwagger(app);
+app.use(apiErrorHandler);
 
 
 
@@ -338,126 +315,19 @@ app.get('/logout', (req, res) => {
 // Маршруты каталога и товаров
 app.get('/catalog', async (req, res) => {
     const { search, sort, category, inStock } = req.query;
-    const searchQuery = search || '';
-    const sortOption = sort || 'name_asc';
-    const categoryId = category || '';
-    const inStockFilter = inStock || '';
     try {
         const categoriesResult = await pool.query(`
             SELECT id, name
-            FROM Categories
+            FROM categories
             ORDER BY name
         `);
-        let query = '';
-        const values = [];
-        let conditions = [];
-        if (categoryId) {
-            query = `
-                WITH RECURSIVE category_tree AS (
-                    SELECT id
-                    FROM Categories
-                    WHERE id = $1
-                    UNION ALL
-                    SELECT c.id
-                    FROM Categories c
-                    JOIN category_tree ct ON c.parent_id = ct.id
-                )
-            `;
-            values.push(categoryId);
-        }
-        query += `
-            SELECT p.article, p.name, p.description, p.image_url, p.price, p.stock, c.name AS category_name,
-                   COALESCE(ps.add_to_cart_count, 0) AS popularity
-        `;
-        if (searchQuery) {
-            query += `,
-                   GREATEST(
-                       SIMILARITY(LOWER(p.name), LOWER($${values.length + 1})),
-                       SIMILARITY(LOWER(p.description), LOWER($${values.length + 1})),
-                       SIMILARITY(LOWER(p.name), LOWER($${values.length + 2})),
-                       SIMILARITY(LOWER(p.description), LOWER($${values.length + 2}))
-                   ) AS similarity_score
-            `;
-        } else {
-            query += `,
-                   0 AS similarity_score
-            `;
-        }
-        query += `
-            FROM Products p
-            LEFT JOIN Categories c ON p.category_id = c.id
-            LEFT JOIN product_stats ps ON p.article = ps.product_article
-        `;
-        if (categoryId) {
-            conditions.push(`p.category_id IN (SELECT id FROM category_tree)`);
-        }
-        if (inStockFilter === 'true') {
-            conditions.push(`p.stock > 0`);
-        } else if (inStockFilter === 'false') {
-            conditions.push(`p.stock = 0`);
-        }
-        if (searchQuery) {
-            let normalizedQuery = searchQuery.toLowerCase();
-            const endings = ['ы', 'и', 'ов', 'ами', 'ам', 'ах', 'ей', 'ой', 'а', 'я'];
-            for (const ending of endings) {
-                if (normalizedQuery.endsWith(ending)) {
-                    normalizedQuery = normalizedQuery.slice(0, -ending.length);
-                    break;
-                }
-            }
-            conditions.push(`
-                (
-                    p.article = $${values.length + 1}
-                    OR SIMILARITY(LOWER(p.name), LOWER($${values.length + 1})) > 0.2
-                    OR SIMILARITY(LOWER(p.description), LOWER($${values.length + 1})) > 0.2
-                    OR SIMILARITY(LOWER(p.name), LOWER($${values.length + 2})) > 0.2
-                    OR SIMILARITY(LOWER(p.description), LOWER($${values.length + 2})) > 0.2
-                    OR EXISTS (
-                        SELECT 1
-                        FROM unnest(string_to_array(LOWER(p.name), ' ')) AS word
-                        WHERE SIMILARITY(word, $${values.length + 1}) > 0.2
-                           OR SIMILARITY(word, $${values.length + 2}) > 0.2
-                           OR word ILIKE '%' || $${values.length + 1} || '%'
-                           OR word ILIKE '%' || $${values.length + 2} || '%'
-                    )
-                )
-            `);
-            values.push(searchQuery.toUpperCase());
-            values.push(normalizedQuery);
-        }
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
-        }
-        if (searchQuery) {
-            query += ' ORDER BY similarity_score DESC';
-        } else {
-            if (sortOption === 'name_asc') {
-                query += ' ORDER BY p.name ASC';
-            } else if (sortOption === 'name_desc') {
-                query += ' ORDER BY p.name DESC';
-            } else if (sortOption === 'price_asc') {
-                query += ' ORDER BY p.price ASC';
-            } else if (sortOption === 'price_desc') {
-                query += ' ORDER BY p.price DESC';
-            } else if (sortOption === 'popularity_asc') {
-                query += ' ORDER BY COALESCE(ps.add_to_cart_count, 0) ASC';
-            } else if (sortOption === 'popularity_desc') {
-                query += ' ORDER BY COALESCE(ps.add_to_cart_count, 0) DESC';
-            }
-        }
-        console.log('SQL Query:', query);
-        console.log('Values:', values);
-        const result = await pool.query(query, values);
-        result.rows.forEach(row => {
-            logger.info(`Найден товар: ${row.name} (арт. ${row.article}), схожесть: ${(row.similarity_score * 100).toFixed(1)}%`);
-        });
         res.render('catalog', {
-            products: result.rows,
+            products: [],
             categories: categoriesResult.rows,
-            searchQuery,
-            sort: sortOption,
-            categoryId,
-            inStock: inStockFilter,
+            searchQuery: search || '',
+            sort: sort || 'name_asc',
+            categoryId: category || '',
+            inStock: inStock || '',
             user: req.session.user || null
         });
     } catch (err) {

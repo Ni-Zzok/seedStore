@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -25,6 +26,9 @@
     "socket.io": "^4.8.1",
     "transliteration": "^2.3.5",
     "winston": "^3.17.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "swagger-ui-express": "^5.0.1",
+    "swagger-jsdoc": "^6.2.8",
+    "dotenv": "^16.4.5"
   }
 }

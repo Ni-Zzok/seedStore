@@ -1,0 +1,12 @@
+const express = require('express');
+const { asyncHandler } = require('../../middleware/errorHandler');
+const { requireAdmin } = require('../../middleware/auth');
+const c = require('../../controllers/suppliers.controller');
+const router = express.Router();
+router.use(requireAdmin);
+router.get('/', asyncHandler(c.listSuppliers));
+router.get('/:id', asyncHandler(c.getSupplier));
+router.post('/', asyncHandler(c.createSupplier));
+router.patch('/:id', asyncHandler(c.updateSupplier));
+router.delete('/:id', asyncHandler(c.deleteSupplier));
+module.exports = router;
