@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -14,7 +15,6 @@ const { apiErrorHandler } = require('./middleware/errorHandler');
 const { setupSwagger } = require('./swagger/swagger');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
-require('dotenv').config();
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
