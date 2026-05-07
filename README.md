@@ -36,18 +36,6 @@ npm run dev
 - Swagger UI: `/api-docs`
 - OpenAPI JSON: `/api-docs/openapi.json`
 
-## Архитектура проекта
-
-После рефакторинга `server.js` используется как entry point: создаёт Express-приложение, настраивает HTTP/HTTPS, сессии, middleware, Swagger, API routes, page routes, Socket.IO и запуск сервера. Основная логика вынесена из файла запуска:
-
-- `db/pool.js` — общий PostgreSQL pool;
-- `middleware/` — авторизация и единый JSON error handler для API;
-- `controllers/` и `routes/api/` — REST API под `/api`;
-- `routes/pages/` — старые HTML/EJS маршруты с сохранёнными URL;
-- `services/` — общие сервисы логирования, дневной статистики и безопасно вынесенные повторяемые page SQL-запросы;
-- `realtime/chat.socket.js` — логика Socket.IO чат-бота;
-- `swagger/swagger.js` — OpenAPI спецификация и `/api-docs`.
-
 ## REST API
 
 API использует текущие cookie-сессии `express-session`. Все endpoints под `/api/*` возвращают JSON. Ошибки возвращаются в едином формате:
