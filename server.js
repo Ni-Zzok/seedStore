@@ -3,7 +3,6 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
-const { Server } = require('socket.io');
 const path = require('path');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
@@ -18,22 +17,20 @@ const multer = require('multer');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
-
 const httpsKeyPath = process.env.HTTPS_KEY_PATH;
 const httpsCertPath = process.env.HTTPS_CERT_PATH;
 const httpsEnabled = Boolean(httpsKeyPath && httpsCertPath);
 
 if (httpsEnabled) {
-    app.set('trust proxy', 1);
+  app.set('trust proxy', 1);
 }
 
 const server = httpsEnabled
-    ? https.createServer({
-        key: fs.readFileSync(httpsKeyPath),
-        cert: fs.readFileSync(httpsCertPath)
-      }, app)
-    : http.createServer(app);
-
+  ? https.createServer({
+      key: fs.readFileSync(httpsKeyPath),
+      cert: fs.readFileSync(httpsCertPath)
+    }, app)
+  : http.createServer(app);
 const io = new Server(server);
 
 let dailyStats = {
@@ -69,77 +66,84 @@ const statsLogger = {
 
 // Проверка подключения к БД
 pool.connect()
-  .then(client => {
+  .then((client) => {
     logger.info('Успешно подключено к PostgreSQL');
     client.release();
   })
-  .catch(err => logger.error('Ошибка подключения к БД:', err));
+  .catch((err) => logger.error('Ошибка подключения к БД:', err));
 
-  
-// Конфигурация сессий
 const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET || 'default_secret',
-    store: new PgSession({
-      pool,
-      tableName: 'user_sessions',
-      createTableIfMissing: true
-    }),
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: httpsEnabled,
-      maxAge: 86400000,
-      sameSite: 'lax'
-    }
-  });
+  secret: process.env.SESSION_SECRET || 'default_secret',
+  store: new PgSession({
+    pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
+  }),
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: httpsEnabled,
+    maxAge: 86400000,
+    sameSite: 'lax'
+  }
+});
 
-// Middleware
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/avatars/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    cb(null, `${req.session.userId}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Файл должен быть изображением'), false);
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 app.use(sessionMiddleware);
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Передаем сессии в Socket.IO
 io.use((socket, next) => {
-    sessionMiddleware(socket.request, {}, next);
+  sessionMiddleware(socket.request, {}, next);
 });
+setupChatSocket(io);
 
 // Middleware для подсчета уникальных посещений
 app.use((req, res, next) => {
-    const visitTracked = req.cookies['visitTracked'];
-    if (!visitTracked) {
-        dailyStats.visits++;
-        res.cookie('visitTracked', 'true', {
-            maxAge: 24 * 60 * 60 * 1000,
-            httpOnly: true,
-            secure: httpsEnabled
-        });
-    }
-    next();
+  const visitTracked = req.cookies.visitTracked;
+  if (!visitTracked) {
+    stats.trackVisit();
+    res.cookie('visitTracked', 'true', {
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: httpsEnabled
+    });
+  }
+  next();
 });
-//http cookie
 
-// Настройка шаблонизатора EJS
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Функция для записи статистики
-function logDailyStats() {
-    statsLogger.info(dailyStats);
-    dailyStats = {
-        visits: 0,
-        productOrders: {}
-    };
-}
-
-// В production используем Vercel Cron Jobs вместо node-schedule
 if (!isProduction) {
-    const schedule = require('node-schedule');
-    schedule.scheduleJob('0 0 * * *', () => {
-        logDailyStats();
-        logger.info('Ежедневная статистика записана');
-    });
+  const schedule = require('node-schedule');
+  schedule.scheduleJob('0 0 * * *', () => {
+    stats.logDailyStats();
+    logger.info('Ежедневная статистика записана');
+  });
 }
 
 // Настройка хранилища ав
@@ -179,30 +183,10 @@ app.use(apiErrorHandler);
 
 // Добавляем endpoint для вызова по расписанию в production
 if (isProduction) {
-    app.get('/cron/daily-stats', (req, res) => {
-        logDailyStats();
-        logger.info('Ежедневная статистика записана (по расписанию)');
-        res.status(200).send('OK');
-    });
-}
-// Основные маршруты
-app.get('/', async (req, res) => {
-    logger.info(`Сессия на главной: userId=${req.session.userId || 'guest'}, authenticated=${Boolean(req.session.userId)}`);
-    try {
-      const categoriesResult = await pool.query(`
-        SELECT id, name, image_url
-        FROM Categories
-        WHERE parent_id IS NULL
-        ORDER BY name
-      `);
-      res.render('index', {
-        user: req.session.user,
-        categories: categoriesResult.rows
-      });
-    } catch (err) {
-      logger.error('Ошибка при загрузке главной страницы: ' + err.stack);
-      res.status(500).send('Ошибка сервера');
-    }
+  app.get('/cron/daily-stats', (req, res) => {
+    stats.logDailyStats();
+    logger.info('Ежедневная статистика записана (по расписанию)');
+    res.status(200).send('OK');
   });
 app.get('/login', (req, res) => {
     if (req.session.userId) {
@@ -1422,31 +1406,27 @@ app.get('/admin/sales-stats', requireAdmin, async (req, res) => {
         // Сортируем по количеству продаж (по убыванию)
         dailyProductSales.sort((a, b) => b.quantity - a.quantity);
 
-        res.render('sales-stats', {
-            user: req.session.user,
-            totalRevenue: totalRevenueValue,
-            todayRevenue: todayRevenueValue,
-            weekRevenue: weekRevenueValue,
-            monthRevenue: monthRevenueValue,
-            topProducts: topProducts.rows,
-            orderStats: orderStats.rows,
-            salesByDay: salesByDay.rows,
-            salesByMonth: salesByMonth.rows,
-            dailyVisits: dailyStats.visits,
-            dailyProductSales: dailyProductSales // Добавляем статистику продаж по товарам
-        });
-    } catch (err) {
-        logger.error('Ошибка при загрузке страницы статистики продаж: ' + err.stack);
-        res.status(500).send('Ошибка сервера');
-    }
+app.use('/api', require('./routes/api')(upload));
+setupSwagger(app);
+app.use(apiErrorHandler);
+app.use(require('./routes/pages')(upload));
+
+app.use((err, req, res, next) => {
+  logger.error(err.stack || err.message);
+  if (res.headersSent) {
+    return next(err);
+  }
+  return res.status(500).render('error', {
+    message: 'Ошибка сервера',
+    user: req.session?.user || null
+  });
 });
 
-// Запуск сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    const protocol = httpsEnabled ? 'https' : 'http';
-    logger.info(`Сервер запущен на ${protocol}://localhost:${PORT}`);
-    if (!httpsEnabled) {
-        logger.warn('HTTPS отключён. Укажите HTTPS_KEY_PATH и HTTPS_CERT_PATH для запуска по HTTPS.');
-    }
+  const protocol = httpsEnabled ? 'https' : 'http';
+  logger.info(`Сервер запущен на ${protocol}://localhost:${PORT}`);
+  if (!httpsEnabled) {
+    logger.warn('HTTPS отключён. Укажите HTTPS_KEY_PATH и HTTPS_CERT_PATH для запуска по HTTPS.');
+  }
 });
