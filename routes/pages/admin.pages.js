@@ -218,7 +218,7 @@ router.post('/admin/:table/delete', requireAdmin, async (req, res) => {
 });
 
 // Маршрут статистики продаж
-// Маршрут статистики продаж
+
 router.get('/admin/sales-stats', requireAdmin, async (req, res) => {
     try {
         const totalRevenue = await pool.query(`
